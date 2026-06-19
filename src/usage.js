@@ -91,7 +91,7 @@ export function usageEntryFromIntent(intent, text) {
 
   return {
     status: "matched",
-    mode: intent.scheduleDay?.keyword || "now",
+    mode: intent.requestedTime ? "time" : intent.scheduleDay?.keyword || "now",
     location: intent.locationQuery || "all",
   };
 }

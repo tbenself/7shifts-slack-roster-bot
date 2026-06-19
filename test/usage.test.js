@@ -80,6 +80,19 @@ test("builds usage entry from roster intent", () => {
       location: "downtown",
     },
   );
+
+  assert.deepEqual(
+    usageEntryFromIntent({
+      recognized: true,
+      locationQuery: "downtown",
+      requestedTime: { hour: 14, minute: 0, label: "2:00 PM" },
+    }),
+    {
+      status: "matched",
+      mode: "time",
+      location: "downtown",
+    },
+  );
 });
 
 class MemoryKv {

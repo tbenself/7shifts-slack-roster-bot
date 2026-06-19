@@ -32,7 +32,7 @@ export function normalizeText(text) {
     .replace(/<@[^>]+>/g, " ")
     .replace(/[’]/g, "'")
     .toLowerCase()
-    .replace(/[^a-z0-9\s&-]/g, " ")
+    .replace(/[^a-z0-9\s&:-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -59,8 +59,9 @@ export function parseRosterIntent(text, locationAliases = new Map()) {
   const normalized = normalizeText(text);
   if (!normalized) return { recognized: false };
   const scheduleDay = extractScheduleDay(normalized);
+  const requestedTime = extractRequestedTime(normalized);
 
-  const directLocationText = stripIntentWords(normalized);
+  const directLocationText = stripIntentWords(stripRequestedTime(normalized));
   const directLocation = resolveLocation(directLocationText, locationAliases);
   if (directLocation.matched) {
     return {
@@ -68,13 +69,14 @@ export function parseRosterIntent(text, locationAliases = new Map()) {
       locationQuery: directLocation.query,
       locationTarget: directLocation.target,
       scheduleDay,
+      requestedTime,
     };
   }
 
   const whoPattern = WHO_WORKING_PATTERNS.find((pattern) => pattern.test(normalized));
   if (!whoPattern) return { recognized: false };
 
-  const locationText = normalized
+  const locationText = stripRequestedTime(normalized)
     .replace(whoPattern, " ")
     .split(/\s+/)
     .filter((word) => !FILLER_WORDS.has(word) && !SCHEDULE_DAYS.has(word))
@@ -82,7 +84,7 @@ export function parseRosterIntent(text, locationAliases = new Map()) {
     .trim();
 
   if (!locationText) {
-    return { recognized: true, scheduleDay };
+    return { recognized: true, scheduleDay, requestedTime };
   }
 
   const resolved = resolveLocation(locationText, locationAliases);
@@ -91,6 +93,7 @@ export function parseRosterIntent(text, locationAliases = new Map()) {
     locationQuery: locationText,
     locationTarget: resolved.matched ? resolved.target : undefined,
     scheduleDay,
+    requestedTime,
     unknownLocation: !resolved.matched,
   };
 }
@@ -119,6 +122,55 @@ function extractScheduleDay(text) {
     }
   }
   return null;
+}
+
+function extractRequestedTime(text) {
+  const normalized = normalizeText(text);
+  if (/\bnoon\b/.test(normalized)) return { hour: 12, minute: 0, label: "noon" };
+  if (/\bmidnight\b/.test(normalized)) return { hour: 0, minute: 0, label: "midnight" };
+
+  const clockMatch = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(am|pm|a|p)?\b/);
+  if (clockMatch) {
+    return normalizeTimeParts(Number(clockMatch[1]), Number(clockMatch[2]), clockMatch[3]);
+  }
+
+  const meridiemMatch = normalized.match(/\b(1[0-2]|0?[1-9])\s*(am|pm|a|p)\b/);
+  if (meridiemMatch) {
+    return normalizeTimeParts(Number(meridiemMatch[1]), 0, meridiemMatch[2]);
+  }
+
+  return null;
+}
+
+function normalizeTimeParts(hour, minute, meridiem) {
+  const normalizedMeridiem = meridiem ? meridiem[0].toLowerCase() : "";
+  let normalizedHour = hour;
+  if (normalizedMeridiem === "p" && hour < 12) normalizedHour += 12;
+  if (normalizedMeridiem === "a" && hour === 12) normalizedHour = 0;
+  if (normalizedHour > 23 || minute > 59) return null;
+
+  return {
+    hour: normalizedHour,
+    minute,
+    label: formatTimeLabel(normalizedHour, minute),
+  };
+}
+
+function formatTimeLabel(hour, minute) {
+  if (hour === 0 && minute === 0) return "midnight";
+  if (hour === 12 && minute === 0) return "noon";
+  const meridiem = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${meridiem}`;
+}
+
+function stripRequestedTime(text) {
+  return normalizeText(text)
+    .replace(/\b(noon|midnight)\b/g, " ")
+    .replace(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(am|pm|a|p)?\b/g, " ")
+    .replace(/\b(1[0-2]|0?[1-9])\s*(am|pm|a|p)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function stripIntentWords(text) {

@@ -44,14 +44,46 @@ export class SevenShiftsClient {
     };
   }
 
+  async getRosterAtTime({ locationTarget, requestedTime, offsetDays = 0, timeZone = "America/New_York" } = {}) {
+    const locations = await this.listLocations().catch(() => []);
+    const locationId = resolveLocationId(locationTarget, locations);
+    const locationNameFilter = locationTarget && !locationId ? String(locationTarget) : "";
+    const targetDay = addDays(localDateParts(this.now(), timeZone), offsetDays, timeZone);
+    const at = zonedDateTimeToUtc(
+      targetDay.year,
+      targetDay.month,
+      targetDay.day,
+      requestedTime.hour,
+      requestedTime.minute,
+      0,
+      timeZone,
+    );
+
+    const [shifts, users, roles, departments] = await Promise.all([
+      this.listShiftsActiveAt(locationId, at),
+      this.listUsers(locationId),
+      this.listRoles(locationId).catch(() => []),
+      this.listDepartments(locationId).catch(() => []),
+    ]);
+
+    const roster = buildRoster({ shifts, users, roles, departments, locations, locationId });
+    return {
+      roster: locationNameFilter ? filterRosterByLocationName(roster, locationNameFilter) : roster,
+      at,
+    };
+  }
+
   async listCurrentShifts(locationId) {
-    const now = this.now();
-    const nowMs = now.getTime();
-    const lookbackStart = new Date(nowMs - 36 * 60 * 60 * 1000);
+    return this.listShiftsActiveAt(locationId, this.now());
+  }
+
+  async listShiftsActiveAt(locationId, at) {
+    const atMs = at.getTime();
+    const lookbackStart = new Date(atMs - 36 * 60 * 60 * 1000);
     const params = {
       limit: 500,
       "start[gte]": formatSevenShiftsDate(lookbackStart),
-      "start[lte]": formatSevenShiftsDate(now),
+      "start[lte]": formatSevenShiftsDate(at),
       sort_by: "start",
       sort_dir: "asc",
     };
@@ -61,7 +93,7 @@ export class SevenShiftsClient {
     return shifts
       .map((item) => unwrap(item, "shift"))
       .filter((shift) => shift && !shift.deleted && !shift.open && getUserId(shift))
-      .filter((shift) => shiftHasStarted(shift, nowMs) && shiftHasNotEnded(shift, nowMs));
+      .filter((shift) => shiftHasStarted(shift, atMs) && shiftHasNotEnded(shift, atMs));
   }
 
   async listShiftsForRange(locationId, range) {
@@ -268,8 +300,6 @@ function filterRosterByLocationName(roster, locationName) {
 function normalizeName(value) {
   return String(value || "")
     .toLowerCase()
-    .replace(/\bwest sixth\b/g, "")
-    .replace(/\bbrewing\b/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

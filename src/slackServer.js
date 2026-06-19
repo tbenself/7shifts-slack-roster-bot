@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import { buildLocationMatcher, locationOptions, parseRosterIntent } from "./intent.js";
-import { formatRosterResponse, formatScheduleResponse, formatUnknownLocation } from "./format.js";
+import {
+  formatRosterAtTimeResponse,
+  formatRosterResponse,
+  formatScheduleResponse,
+  formatUnknownLocation,
+} from "./format.js";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -79,14 +84,32 @@ export async function handleSlackEvent(event, { config, sevenShiftsClient, logge
   }
 
   const requestedLocation = intent.locationQuery ? prettyLocationName(intent.locationTarget, locations, intent.locationQuery) : "";
-  const text = intent.scheduleDay
-    ? await scheduleResponseText({ sevenShiftsClient, intent, config, requestedLocation })
-    : formatRosterResponse(await sevenShiftsClient.getCurrentRoster({ locationTarget: intent.locationTarget }), {
+  const text = intent.requestedTime
+    ? await rosterAtTimeResponseText({ sevenShiftsClient, intent, config, requestedLocation })
+    : intent.scheduleDay
+      ? await scheduleResponseText({ sevenShiftsClient, intent, config, requestedLocation })
+      : formatRosterResponse(await sevenShiftsClient.getCurrentRoster({ locationTarget: intent.locationTarget }), {
       timeZone: config.timeZone,
       nameFormat: config.nameFormat,
       requestedLocation,
     });
   await postSlackMessage(config.slack.botToken, event.channel, text);
+}
+
+async function rosterAtTimeResponseText({ sevenShiftsClient, intent, config, requestedLocation }) {
+  const { roster, at } = await sevenShiftsClient.getRosterAtTime({
+    locationTarget: intent.locationTarget,
+    requestedTime: intent.requestedTime,
+    offsetDays: intent.scheduleDay?.offsetDays || 0,
+    timeZone: config.timeZone,
+  });
+  return formatRosterAtTimeResponse(roster, {
+    timeZone: config.timeZone,
+    nameFormat: config.nameFormat,
+    requestedLocation,
+    requestedAt: at,
+    scheduleLabel: intent.scheduleDay?.keyword || "today",
+  });
 }
 
 async function scheduleResponseText({ sevenShiftsClient, intent, config, requestedLocation }) {
@@ -132,8 +155,8 @@ async function postSlackMessage(botToken, channel, text) {
 }
 
 function usageText(options) {
-  const suffix = options.length ? `\nKnown locations: ${options.slice(0, 8).join(", ")}` : "";
-  return `Ask me "who's working", send a location like "Downtown", or send "Downtown tomorrow" for a full schedule.${suffix}`;
+  const suffix = options.length ? `\n\nLocation options: ${options.join(", ")}` : "";
+  return `You can DM just a location - no need to type "who's working".\n\nExamples: "downtown", "downtown noon", "downtown 2pm", "riverside tomorrow", "events today".\n\nAdd "today", "tomorrow", or "yesterday" for a full-day schedule. Add a time like "noon" or "2pm" to check who is working at that time today.${suffix}`;
 }
 
 function prettyLocationName(target, locations, fallback) {

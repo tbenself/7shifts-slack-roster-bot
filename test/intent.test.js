@@ -29,6 +29,22 @@ test("recognizes a configured location alias with a schedule day", () => {
   assert.deepEqual(riverside.scheduleDay, { keyword: "yesterday", offsetDays: -1 });
 });
 
+test("recognizes a configured location alias with a requested time", () => {
+  const matcher = buildLocationMatcher([], { downtown: 123, riverside: 456 });
+  const noon = parseRosterIntent("downtown noon", matcher);
+  const afternoon = parseRosterIntent("downtown 2pm", matcher);
+  const spaced = parseRosterIntent("who is working at riverside 2 pm?", matcher);
+  const halfHour = parseRosterIntent("downtown 2:30pm", matcher);
+
+  assert.equal(noon.recognized, true);
+  assert.equal(noon.locationTarget, 123);
+  assert.deepEqual(noon.requestedTime, { hour: 12, minute: 0, label: "noon" });
+  assert.deepEqual(afternoon.requestedTime, { hour: 14, minute: 0, label: "2:00 PM" });
+  assert.equal(spaced.locationTarget, 456);
+  assert.deepEqual(spaced.requestedTime, { hour: 14, minute: 0, label: "2:00 PM" });
+  assert.deepEqual(halfHour.requestedTime, { hour: 14, minute: 30, label: "2:30 PM" });
+});
+
 test("recognizes location inside a who is working phrase", () => {
   const matcher = buildLocationMatcher([{ id: 456, name: "Riverside Bar" }], {});
   const intent = parseRosterIntent("who is working at Riverside?", matcher);

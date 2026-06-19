@@ -56,12 +56,43 @@ export function formatScheduleResponse(roster, options = {}) {
   return lines.join("\n");
 }
 
-export function formatUnknownLocation(locationQuery, locationNames = []) {
-  const options = locationNames.slice(0, 8).join(", ");
-  if (!options) {
-    return `I do not recognize "${locationQuery}" as a 7shifts location yet. Try "who's working" for all locations.`;
+export function formatRosterAtTimeResponse(roster, options = {}) {
+  const {
+    timeZone = "America/New_York",
+    nameFormat = "first_last_initial",
+    requestedLocation,
+    requestedAt = new Date(),
+    scheduleLabel = "today",
+  } = options;
+
+  const time = formatTime(requestedAt, timeZone);
+  const date = formatDate(requestedAt, timeZone);
+  const when = scheduleLabel ? `${scheduleLabel} at ${time}` : `at ${time}`;
+  const scope = requestedLocation ? ` at ${requestedLocation}` : "";
+
+  if (!roster.groups.length) {
+    return `No one is scheduled as working ${when}${scope} (${date}).`;
   }
-  return `I do not recognize "${locationQuery}" yet. Try one of: ${options}.`;
+
+  const lines = [`*Who's working ${when}${scope}* (${date})`];
+  for (const group of roster.groups) {
+    lines.push(`\n*${group.locationName}* (${group.shifts.length})`);
+    for (const shift of group.shifts) {
+      const person = formatPersonName(shift.user, nameFormat);
+      const detail = formatShiftDetail(shift);
+      const until = shift.end ? ` until ${formatTime(new Date(shift.end), timeZone)}` : "";
+      lines.push(`• ${person}${detail}${until}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export function formatUnknownLocation(locationQuery, locationNames = []) {
+  const options = locationNames.join(", ");
+  if (!options) {
+    return `I do not recognize "${locationQuery}" as a 7shifts location yet. You can DM just a location name, add a time like "2pm" or "noon", or add "today", "tomorrow", or "yesterday" for a full-day schedule.`;
+  }
+  return `I do not recognize "${locationQuery}" yet. You do not need to type "who's working" - you can DM just a location.\n\nLocation options: ${options}\n\nExamples: "downtown", "downtown noon", "downtown 2pm", "riverside tomorrow", "events today".`;
 }
 
 function formatPersonName(user, nameFormat) {

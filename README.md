@@ -12,11 +12,14 @@ Example Slack DMs:
 - `who's working`
 - `who is working at Downtown`
 - `downtown`
+- `downtown noon`
+- `downtown 2pm`
 - `riverside tomorrow`
 - `events today`
 - `usage`
 
 By default, a bare location returns who is working right now. A location followed by `yesterday`, `today`, or `tomorrow` returns the full schedule for that local calendar day.
+A location followed by a time such as `noon`, `2pm`, `2 pm`, or `2:30pm` returns who is scheduled at that specific local time. You can combine a day and time, such as `downtown tomorrow 2pm`.
 
 The bot enriches shifts with employee, role, location, and department/area/station-style labels when 7shifts returns them. Replies intentionally include only names, roles, schedule labels, locations, and shift times.
 
@@ -28,7 +31,7 @@ The bot uses the 7shifts v2 API:
 
 - API requests use `Authorization: Bearer ...`.
 - Some 7shifts tokens may also require an `x-company-guid` header. If your token works without it, leave `SEVENSHIFTS_COMPANY_GUID` blank. If 7shifts returns a GUID/header error, add it.
-- Current shifts are queried from `GET https://api.7shifts.com/v2/company/{company_id}/shifts` with a recent `start` window, then filtered locally to shifts where `start <= now <= end`.
+- Current and specific-time shifts are queried from `GET https://api.7shifts.com/v2/company/{company_id}/shifts` with a recent `start` window, then filtered locally to shifts where `start <= requested_time <= end`.
 - Full-day schedules use a local-day `start` window for `yesterday`, `today`, or `tomorrow`, then sort shifts chronologically.
 - The Worker deliberately avoids the `end[gte]` shift filter because some 7shifts installations have returned slow or timed-out responses with that filter.
 - Users, roles, departments, and locations are read from `/users`, `/roles`, `/departments`, and `/locations` for display names.

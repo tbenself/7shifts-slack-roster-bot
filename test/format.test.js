@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatRosterResponse, formatScheduleResponse } from "../src/format.js";
+import {
+  formatRosterAtTimeResponse,
+  formatRosterResponse,
+  formatScheduleResponse,
+  formatUnknownLocation,
+} from "../src/format.js";
 
 test("formats empty roster", () => {
   const text = formatRosterResponse(
@@ -123,4 +128,41 @@ test("formats a full schedule response", () => {
   assert.match(text, /Fri, Jun 19/);
   assert.match(text, /10:00 AM EDT-4:00 PM EDT - Ada L\. - Bar \/ Patio/);
   assert.doesNotMatch(text, /ada@example/);
+});
+
+test("formats a requested-time roster response", () => {
+  const text = formatRosterAtTimeResponse(
+    {
+      groups: [
+        {
+          locationName: "Downtown Taproom",
+          shifts: [
+            {
+              user: { first_name: "Ada", last_name: "Lovelace", email: "ada@example.com" },
+              role: { name: "Bartender" },
+              department: { name: "Patio" },
+              end: "2026-06-18T22:00:00Z",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      requestedLocation: "downtown",
+      requestedAt: new Date("2026-06-18T18:00:00Z"),
+      timeZone: "America/New_York",
+    },
+  );
+
+  assert.match(text, /Who's working today at 2:00 PM EDT at downtown/);
+  assert.match(text, /Ada L\. - Bartender \/ Patio until 6:00 PM EDT/);
+  assert.doesNotMatch(text, /ada@example/);
+});
+
+test("unknown location help lists all public configuration options", () => {
+  const text = formatUnknownLocation("downtwon", ["downtown", "riverside", "events"]);
+
+  assert.match(text, /You do not need to type "who's working"/);
+  assert.match(text, /Location options: downtown, riverside, events/);
+  assert.match(text, /"downtown 2pm"/);
 });

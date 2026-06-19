@@ -141,6 +141,64 @@ test("getScheduleRoster queries a local day and sorts shifts by start time", asy
   assert.deepEqual(roster.groups[0].shifts.map((shift) => shift.department.name), ["Patio", "Patio"]);
 });
 
+test("getRosterAtTime queries shifts active at requested local time", async () => {
+  const requests = [];
+  const client = new SevenShiftsClient(
+    {
+      apiBaseUrl: "https://example.invalid",
+      accessToken: "token",
+      companyId: "1",
+      companyGuid: "guid",
+    },
+    {
+      now: () => new Date("2026-06-18T16:00:00Z"),
+      fetchImpl: async (url) => {
+        const requestUrl = new URL(url);
+        requests.push(requestUrl);
+        if (requestUrl.pathname.endsWith("/locations")) {
+          return jsonResponse({ data: [{ id: 100, name: "Downtown Taproom" }], meta: { cursor: { next: null } } });
+        }
+        if (requestUrl.pathname.endsWith("/users")) {
+          return jsonResponse({
+            data: [
+              { id: 1, first_name: "Ada", last_name: "Lovelace" },
+              { id: 2, first_name: "Grace", last_name: "Hopper" },
+            ],
+            meta: { cursor: { next: null } },
+          });
+        }
+        if (requestUrl.pathname.endsWith("/roles")) {
+          return jsonResponse({ data: [{ id: 10, name: "Bar" }], meta: { cursor: { next: null } } });
+        }
+        if (requestUrl.pathname.endsWith("/departments")) {
+          return jsonResponse({ data: [{ id: 20, name: "Patio" }], meta: { cursor: { next: null } } });
+        }
+        return jsonResponse({
+          data: [
+            { id: 1, user_id: 1, role_id: 10, department_id: 20, location_id: 100, start: "2026-06-18T17:00:00Z", end: "2026-06-18T19:00:00Z", open: false, deleted: false },
+            { id: 2, user_id: 2, role_id: 10, department_id: 20, location_id: 100, start: "2026-06-18T19:00:00Z", end: "2026-06-18T22:00:00Z", open: false, deleted: false },
+          ],
+          meta: { cursor: { next: null } },
+        });
+      },
+    },
+  );
+
+  const { roster, at } = await client.getRosterAtTime({
+    locationTarget: "Downtown Taproom",
+    requestedTime: { hour: 14, minute: 0, label: "2:00 PM" },
+    timeZone: "America/New_York",
+  });
+
+  const shiftRequest = requests.find((url) => url.pathname.endsWith("/shifts"));
+  assert.equal(at.toISOString(), "2026-06-18T18:00:00.000Z");
+  assert.equal(shiftRequest.searchParams.get("start[lte]"), "2026-06-18T18:00:00Z");
+  assert.equal(shiftRequest.searchParams.get("start[gte]"), "2026-06-17T06:00:00Z");
+  assert.equal(shiftRequest.searchParams.has("end[gte]"), false);
+  assert.deepEqual(roster.groups[0].shifts.map((shift) => shift.shift.id), [1]);
+  assert.deepEqual(roster.groups[0].shifts.map((shift) => shift.department.name), ["Patio"]);
+});
+
 function jsonResponse(body) {
   return {
     ok: true,

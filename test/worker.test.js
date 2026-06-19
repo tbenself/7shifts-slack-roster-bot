@@ -286,6 +286,131 @@ test("worker records unmatched requests in usage KV", async () => {
   }
 });
 
+test("worker replies to a location plus specific time", async () => {
+  const originalFetch = globalThis.fetch;
+  const postedMessages = [];
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("slack.com/api/chat.postMessage")) {
+      postedMessages.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return originalFetch(url, init);
+  };
+
+  let requested;
+  const sevenShiftsClient = {
+    async listLocations() {
+      return [{ id: 100, name: "Downtown Taproom" }];
+    },
+    async getRosterAtTime(options) {
+      requested = options;
+      return {
+        at: new Date("2026-06-18T18:00:00Z"),
+        roster: {
+          groups: [
+            {
+              locationName: "Downtown Taproom",
+              shifts: [
+                {
+                  user: { first_name: "Ada", last_name: "Lovelace" },
+                  role: { name: "Bartender" },
+                  department: { name: "Patio" },
+                  end: "2026-06-18T22:00:00Z",
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  };
+
+  try {
+    await handleSlackEvent(
+      {
+        type: "message",
+        team: "T_ALLOWED",
+        user: "U1",
+        channel_type: "im",
+        channel: "D1",
+        text: "downtown 2pm",
+      },
+      {
+        config: readWorkerConfig({
+          SLACK_SIGNING_SECRET: "secret",
+          SLACK_BOT_TOKEN: "slack-bot-token",
+          SLACK_ALLOWED_TEAM_IDS: "T_ALLOWED",
+          LOCATION_ALIASES_JSON: "{\"downtown\":100}",
+          SEVENSHIFTS_ACCESS_TOKEN: "7shifts-token",
+          SEVENSHIFTS_COMPANY_ID: "123",
+        }),
+        sevenShiftsClient,
+        usageKv: new MemoryKv(),
+      },
+    );
+
+    assert.deepEqual(requested.requestedTime, { hour: 14, minute: 0, label: "2:00 PM" });
+    assert.equal(requested.locationTarget, 100);
+    assert.equal(postedMessages.length, 1);
+    assert.match(postedMessages[0].text, /Who's working today at 2:00 PM EDT at Downtown Taproom/);
+    assert.match(postedMessages[0].text, /Ada L\. - Bartender \/ Patio/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("worker help says a user can DM just a listed location", async () => {
+  const originalFetch = globalThis.fetch;
+  const postedMessages = [];
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("slack.com/api/chat.postMessage")) {
+      postedMessages.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return originalFetch(url, init);
+  };
+
+  const sevenShiftsClient = {
+    async listLocations() {
+      return [];
+    },
+  };
+
+  try {
+    await handleSlackEvent(
+      {
+        type: "message",
+        team: "T_ALLOWED",
+        user: "U1",
+        channel_type: "im",
+        channel: "D1",
+        text: "hello there",
+      },
+      {
+        config: readWorkerConfig({
+          SLACK_SIGNING_SECRET: "secret",
+          SLACK_BOT_TOKEN: "slack-bot-token",
+          SLACK_ALLOWED_TEAM_IDS: "T_ALLOWED",
+          LOCATION_ALIASES_JSON: "{\"downtown\":\"Downtown Taproom\",\"riverside\":\"Riverside Bar\",\"events\":\"Events Team\"}",
+          SEVENSHIFTS_ACCESS_TOKEN: "7shifts-token",
+          SEVENSHIFTS_COMPANY_ID: "123",
+        }),
+        sevenShiftsClient,
+        usageKv: new MemoryKv(),
+      },
+    );
+
+    assert.equal(postedMessages.length, 1);
+    assert.match(postedMessages[0].text, /You can DM just a location/);
+    assert.match(postedMessages[0].text, /Location options: downtown, events, riverside/);
+    assert.match(postedMessages[0].text, /"downtown 2pm"/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 async function signSlackBody(secret, timestamp, body) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(

@@ -1,0 +1,31 @@
+name = "7shifts-slack-roster-bot"
+main = "src/worker.js"
+compatibility_date = "2026-06-18"
+workers_dev = true
+preview_urls = false
+
+# Optional: enable aggregate usage stats with Cloudflare KV.
+# Create this with:
+#   npx wrangler kv namespace create USAGE_KV
+# Then paste your namespace id below and copy this file to wrangler.toml.
+#
+# [[kv_namespaces]]
+# binding = "USAGE_KV"
+# id = "replace-with-your-kv-namespace-id"
+
+[vars]
+TIME_ZONE = "America/New_York"
+NAME_FORMAT = "first_last_initial"
+SEVENSHIFTS_API_VERSION = "2025-03-01"
+
+# Optional examples. Values may be numeric 7shifts location IDs or exact
+# 7shifts location names returned by the /locations endpoint.
+LOCATION_ALIASES_JSON = "{\"downtown\":\"Downtown Taproom\",\"dt\":\"Downtown Taproom\",\"riverside\":\"Riverside Bar\",\"events\":\"Events Team\"}"
+
+# Set these as encrypted Worker secrets, not plain vars:
+# - SLACK_SIGNING_SECRET
+# - SLACK_BOT_TOKEN
+# - SLACK_ALLOWED_TEAM_IDS
+# - SEVENSHIFTS_ACCESS_TOKEN
+# - SEVENSHIFTS_COMPANY_ID
+# - SEVENSHIFTS_COMPANY_GUID, if 7shifts requires x-company-guid

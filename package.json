@@ -1,0 +1,16 @@
+{
+  "name": "7shifts-slack-roster-bot",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Slack DM bot that answers who is working right now from 7shifts schedules.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev:worker": "npx wrangler dev",
+    "deploy:worker": "npx wrangler deploy",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
